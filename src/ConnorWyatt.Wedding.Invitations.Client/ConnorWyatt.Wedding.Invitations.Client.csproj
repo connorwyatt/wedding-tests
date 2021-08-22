@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net5.0</TargetFramework>
+        <LangVersion>9</LangVersion>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\ConnorWyatt.Wedding.Common.Http\ConnorWyatt.Wedding.Common.Http.csproj" />
+        <ProjectReference Include="..\ConnorWyatt.Wedding.Common.Models\ConnorWyatt.Wedding.Common.Models.csproj" />
+        <ProjectReference Include="..\ConnorWyatt.Wedding.Invitations.Models\ConnorWyatt.Wedding.Invitations.Models.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="NodaTime.Serialization.SystemTextJson" Version="1.0.0" />
+    </ItemGroup>
+
+</Project>
