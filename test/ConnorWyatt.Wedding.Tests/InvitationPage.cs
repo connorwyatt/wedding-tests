@@ -7,7 +7,7 @@ namespace ConnorWyatt.Wedding.Tests
     {
         public static async Task<InvitationPage> NavigateTo(IPage page, string code)
         {
-            await page.GotoAsync($"http://localhost:3000/invitation/{code}");
+            await page.GotoAsync($"{Urls.Wedding}invitation/{code}");
             await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
 
             return new InvitationPage(page);

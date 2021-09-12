@@ -22,13 +22,13 @@ namespace ConnorWyatt.Wedding.Tests
 
         public InvitationsTests()
         {
-            var httpClient = new HttpClient { BaseAddress = new Uri("http://localhost:8001") };
+            var httpClient = new HttpClient { BaseAddress = Urls.WeddingInvitations };
             _invitationsClient = new HttpWeddingInvitationsClient(httpClient);
             _playwright = Playwright.CreateAsync().Result;
             _browser = _playwright.Chromium.LaunchAsync(
                     new BrowserTypeLaunchOptions
                     {
-                        // Headless = false,
+                        Headless = false,
                     })
                 .Result;
         }
@@ -50,31 +50,31 @@ namespace ConnorWyatt.Wedding.Tests
             {
                 var invitationDescription = await (await invitationPage.GetInvitationDescription()).InnerTextAsync();
                 invitationDescription.Should()
-                    .Contain($"Would like to invite {invitation.AddressedTo} to join them to celebrate their marriage");
+                    .Contain($"Would like to invite {invitation.AddressedTo} to join them in celebration of their marriage".ToUpper());
 
                 var date = await (await invitationPage.GetDate()).InnerTextAsync();
-                date.Should().Be("19.03.2022");
+                date.Should().Be("19.03.2022".ToUpper());
 
                 var dayTimings = await (await invitationPage.GetDayTimings()).InnerTextAsync();
                 if (invitationType == InvitationType.FullDay)
                 {
-                    dayTimings.Should().Be("4pm Ceremony, 7pm Reception");
+                    dayTimings.Should().Be("4pm Ceremony, 7pm Reception".ToUpper());
                 }
                 else
                 {
-                    dayTimings.Should().Be("7pm Reception");
-                    dayTimings.Should().NotContain("4pm Ceremony");
+                    dayTimings.Should().Be("7pm Reception".ToUpper());
+                    dayTimings.Should().NotContain("4pm Ceremony".ToUpper());
                 }
 
                 var location = await (await invitationPage.GetLocation()).InnerTextAsync();
                 location.Should()
-                    .Contain("Wootton Park")
-                    .And.Contain("Wootton Wawen")
-                    .And.Contain("Henley-in-Arden")
-                    .And.Contain("B95 6HJ");
+                    .Contain("Wootton Park".ToUpper())
+                    .And.Contain("Wootton Wawen".ToUpper())
+                    .And.Contain("Henley-in-Arden".ToUpper())
+                    .And.Contain("B95 6HJ".ToUpper());
 
                 var rsvpDate = await (await invitationPage.GetRsvpDate()).InnerTextAsync();
-                rsvpDate.Should().Contain("RSVP by 01.02.2022");
+                rsvpDate.Should().Contain("by 01.01.2022".ToUpper());
             }
         }
 
@@ -121,7 +121,7 @@ namespace ConnorWyatt.Wedding.Tests
 
             var invitationBanner = await invitationPage.GetRsvpBanner();
 
-            (await invitationBanner.InnerTextAsync()).Should().Be("Thanks for your RSVP");
+            (await invitationBanner.InnerTextAsync()).Should().Be("Thanks for your RSVP".ToUpper());
             (await invitationPage.HasRsvpLink()).Should().BeFalse();
 
             invitation = await GetInvitation(invitationId);
@@ -138,6 +138,56 @@ namespace ConnorWyatt.Wedding.Tests
             }
         }
 
+        [Fact]
+        public async Task InvitationsCanBeRespondedToForAPersonWhoDoesNotRequireFood()
+        {
+            var invitationId = await CreateInvitationForPersonWhoDoesNotRequireFood();
+            invitationId.Should().NotBeNullOrEmpty();
+
+            var invitation = await GetInvitation(invitationId);
+            invitation.Should().NotBeNull();
+
+            var invitee = invitation.Invitees.Single();
+
+            var page = await _browser.NewPageAsync();
+
+            var invitationPage = await InvitationPage.NavigateTo(page, invitation.Code);
+
+            var rsvpPage = await invitationPage.ClickRsvpLink();
+
+            var inviteeRsvpFormSections = await rsvpPage.GetInviteeRsvpFormSections();
+
+            inviteeRsvpFormSections.Should().HaveCount(1);
+
+            var inviteeRsvpFormSection = inviteeRsvpFormSections.Single();
+
+            await inviteeRsvpFormSection.SelectAttendingRadioOption(true);
+            var requiresNoFoodContent = await inviteeRsvpFormSection.GetRequiresNoFoodContent();
+            var requiresNoFoodContentText = await requiresNoFoodContent.InnerTextAsync();
+            requiresNoFoodContentText.Should()
+                .Contain($"We have {invitee.Name} down as not requiring any food, let us know if this isn't the case and we'll correct it.".ToUpper());
+
+            invitationPage = await rsvpPage.SubmitForm();
+
+            var invitationBanner = await invitationPage.GetRsvpBanner();
+
+            (await invitationBanner.InnerTextAsync()).Should().Be("Thanks for your RSVP".ToUpper());
+            (await invitationPage.HasRsvpLink()).Should().BeFalse();
+
+            invitation = await GetInvitation(invitationId);
+
+            using (new AssertionScope())
+            {
+            invitation.Status.Should().Be(InvitationStatus.ResponseReceived);
+            invitation.RespondedAt.Should().NotBeNull();
+            invitation.ContactInformation.Should().BeNull();
+            invitee = invitation.Invitees.Single();
+            invitee.Status.Should().Be(InviteeStatus.Attending);
+            invitee.FoodOption.Should().BeNull();
+            invitee.DietaryNotes.Should().BeNull();
+            }
+        }
+
         private async Task<string> CreateInvitation(InvitationType invitationType)
         {
             var faker = new Faker();
@@ -151,7 +201,54 @@ namespace ConnorWyatt.Wedding.Tests
                     EmailAddress = faker.Person.Email.ToLower(),
                     Invitees = new List<InviteeDefinition>
                     {
-                        new() { Name = personName },
+                        new() { Name = personName, RequiresFood = true, },
+                    },
+                });
+
+            createInvitationHttpResult.StatusCode.Should().Be(HttpStatusCode.Accepted);
+
+            return createInvitationHttpResult.Value;
+        }
+
+        private async Task<string> CreateInvitationForTwoPeople()
+        {
+            var faker = new Faker();
+            var firstPersonName = faker.Person.FullName;
+            faker = new Faker();
+            var secondPersonName = faker.Person.FullName;
+            var createInvitationHttpResult = await _invitationsClient.CreateInvitation(
+                new InvitationDefinition
+                {
+                    Code = Guid.NewGuid().ToString(),
+                    Type = InvitationType.FullDay,
+                    AddressedTo = $"{firstPersonName} and {secondPersonName}",
+                    EmailAddress = faker.Person.Email.ToLower(),
+                    Invitees = new List<InviteeDefinition>
+                    {
+                        new() { Name = firstPersonName, RequiresFood = true, },
+                        new() { Name = secondPersonName, RequiresFood = true, },
+                    },
+                });
+
+            createInvitationHttpResult.StatusCode.Should().Be(HttpStatusCode.Accepted);
+
+            return createInvitationHttpResult.Value;
+        }
+
+        private async Task<string> CreateInvitationForPersonWhoDoesNotRequireFood()
+        {
+            var faker = new Faker();
+            var personName = faker.Person.FullName;
+            var createInvitationHttpResult = await _invitationsClient.CreateInvitation(
+                new InvitationDefinition
+                {
+                    Code = Guid.NewGuid().ToString(),
+                    Type = InvitationType.FullDay,
+                    AddressedTo = personName,
+                    EmailAddress = faker.Person.Email.ToLower(),
+                    Invitees = new List<InviteeDefinition>
+                    {
+                        new() { Name = personName, RequiresFood = false, },
                     },
                 });
 

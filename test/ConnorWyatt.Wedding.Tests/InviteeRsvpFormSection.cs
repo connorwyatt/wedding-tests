@@ -78,5 +78,17 @@ namespace ConnorWyatt.Wedding.Tests
 
             await input.FillAsync(dietaryInformation);
         }
+
+        public async Task<IElementHandle> GetRequiresNoFoodContent()
+        {
+            var content = await _elementHandle.QuerySelectorAsync("data-test-id=requiresNoFoodContent");
+
+            if (content is null)
+            {
+                throw new MissingExpectedElementException();
+            }
+
+            return content;
+        }
     }
 }

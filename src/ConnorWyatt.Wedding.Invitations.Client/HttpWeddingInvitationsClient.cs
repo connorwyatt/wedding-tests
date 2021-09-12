@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -52,6 +53,29 @@ namespace ConnorWyatt.Wedding.Invitations.Client
             if (invitation is null) throw new InvalidOperationException("Cannot deserialise body to Invitation.");
 
             return HttpResult<Invitation>.Success(response.StatusCode, invitation);
+        }
+
+
+        public async Task<HttpResult<IList<Invitation>>> GetInvitations()
+        {
+            var response = await _client.GetAsync("/invitations");
+
+            if (!response.IsSuccessStatusCode) return HttpResult<IList<Invitation>>.Error(response.StatusCode);
+
+            var invitations = await response.Content.ReadFromJsonAsync<IList<Invitation>>(SerializerOptions);
+
+            if (invitations is null) throw new InvalidOperationException("Cannot deserialise body to IList<Invitation>.");
+
+            return HttpResult<IList<Invitation>>.Success(response.StatusCode, invitations);
+        }
+
+        public async Task<HttpResult<object>> SendEmail(string invitationId)
+        {
+            var response = await _client.PostAsJsonAsync($"/invitations/{invitationId}/actions/send-invitation-email", new {});
+
+            if (!response.IsSuccessStatusCode) return HttpResult<object>.Error(response.StatusCode);
+
+            return HttpResult<object>.Success(response.StatusCode, new {});
         }
     }
 }
